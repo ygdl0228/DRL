@@ -1,6 +1,6 @@
 # @Time    : 2023/4/23 10:12
 # @Author  : ygd
-# @FileName: comparison.py
+# @FileName: DQN_comparison.py
 # @Software: PyCharm
 
 from DQN import *

@@ -17,7 +17,6 @@ import torch.optim as optim
 
 class ReplayBuffer:
     """A simple numpy replay buffer."""
-
     def __init__(self, obs_dim: int, size: int, batch_size: int = 32):
         self.obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
         self.next_obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
