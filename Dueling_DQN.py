@@ -45,6 +45,8 @@ class Dueling_VAnet(torch.nn.Module):
     def forward(self, x):
         A = self.fc_A(F.relu(self.fc1(x)))
         V = self.fc_V(F.relu(self.fc1(x)))
+        print(A.size())
+        print(V.size())
         Q = V + A - A.mean(1).view(-1, 1)  # Q值由V值和A值计算得到
         return Q
 

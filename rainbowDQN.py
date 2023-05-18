@@ -13,9 +13,12 @@ import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import rl_utils
+from noisynet import *
 
-class rainbow_DQN_ReplayBuffer:
+
+class rainbwDQN_ReplayBuffer:
     ''' 经验回放池 '''
+
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity)  # 队列,先进先出
 
@@ -30,27 +33,34 @@ class rainbow_DQN_ReplayBuffer:
     def size(self):  # 目前buffer中数据的数量
         return len(self.buffer)
 
-class rainbow_DQN_VAnet(torch.nn.Module):
+
+class rainbwDQN_VAnet(torch.nn.Module):
     ''' 只有一层隐藏层的Q网络 '''
+
     def __init__(self, state_dim, hidden_dim, action_dim):
-        super(rainbow_DQN_VAnet, self).__init__()
-        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
-        self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
+        super(rainbwDQN_VAnet, self).__init__()
+        self.fc1 = nn.Linear(state_dim, hidden_dim)(state_dim, hidden_dim)
+        self.fc_A = NoisyLinear(hidden_dim, action_dim)
+        self.fc_V = NoisyLinear(hidden_dim, 1)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))  # 隐藏层使用ReLU激活函数
-        return self.fc2(x)
+        A = self.fc_A(F.relu(self.fc1(x)))
+        V = self.fc_V(F.relu(self.fc1(x)))
+        Q = V + A - A.mean(1).view(-1, 1)  # Q值由V值和A值计算得到
+        return Q
 
-class rainbow_DQN:
+
+class rainbwDQN:
     ''' DQN算法 '''
+
     def __init__(self, state_dim, hidden_dim, action_dim, learning_rate, gamma,
                  epsilon, target_update, device):
         self.action_dim = action_dim
-        self.q_net = rainbow_DQN_VAnet(state_dim, hidden_dim,
-                          self.action_dim).to(device)  # Q网络
+        self.q_net = rainbwDQN_VAnet(state_dim, hidden_dim,
+                                     self.action_dim).to(device)  # Q网络
         # 目标网络
-        self.target_q_net = rainbow_DQN_VAnet(state_dim, hidden_dim,
-                                 self.action_dim).to(device)
+        self.target_q_net = rainbwDQN_VAnet(state_dim, hidden_dim,
+                                            self.action_dim).to(device)
         # 使用Adam优化器
         self.optimizer = torch.optim.Adam(self.q_net.parameters(),
                                           lr=learning_rate)
@@ -61,11 +71,8 @@ class rainbow_DQN:
         self.device = device
 
     def take_action(self, state):  # epsilon-贪婪策略采取动作
-        if np.random.random() < self.epsilon:
-            action = np.random.randint(self.action_dim)
-        else:
-            state = torch.tensor([state], dtype=torch.float).to(self.device)
-            action = self.q_net(state).argmax().item()
+        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        action = self.q_net(state).argmax().item()
         return action
 
     def update(self, transition_dict):
@@ -95,7 +102,8 @@ class rainbow_DQN:
                 self.q_net.state_dict())  # 更新目标网络
         self.count += 1
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     lr = 2e-3
     num_episodes = 500
     hidden_dim = 128
@@ -114,11 +122,11 @@ if __name__=='__main__':
     np.random.seed(0)
     env.seed(0)
     torch.manual_seed(0)
-    replay_buffer = D3QN_ReplayBuffer(buffer_size)
+    replay_buffer = rainbwDQN_ReplayBuffer(buffer_size)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
-    agent = D3QN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
-            target_update, device)
+    agent = rainbwDQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
+                      target_update, device)
 
     DQN_return_list = []
     for i in range(10):
@@ -133,7 +141,7 @@ if __name__=='__main__':
                     replay_buffer.add(state, action, reward, next_state, done)
                     state = next_state
                     episode_return += reward
-                # 当buffer数据的数量超过一定值后,才进行Q网络训练
+                    # 当buffer数据的数量超过一定值后,才进行Q网络训练
                     if replay_buffer.size() > minimal_size:
                         b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
                         transition_dict = {
@@ -148,9 +156,9 @@ if __name__=='__main__':
                 if (i_episode + 1) % 10 == 0:
                     pbar.set_postfix({
                         'episode':
-                        '%d' % (num_episodes / 10 * i + i_episode + 1),
+                            '%d' % (num_episodes / 10 * i + i_episode + 1),
                         'return':
-                        '%.3f' % np.mean(DQN_return_list[-10:])
+                            '%.3f' % np.mean(DQN_return_list[-10:])
                     })
                 pbar.update(1)
 

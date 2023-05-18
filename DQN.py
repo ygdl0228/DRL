@@ -13,9 +13,12 @@ import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import rl_utils
+from noisynet import *
 
-class ReplayBuffer:
+
+class DQNReplayBuffer:
     ''' 经验回放池 '''
+
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity)  # 队列,先进先出
 
@@ -23,26 +26,31 @@ class ReplayBuffer:
         self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):  # 从buffer中采样数据,数量为batch_size
-        transitions = random.sample(self.buffer, batch_size)
+        transitions = random.sample(self.buffer, 2)
         state, action, reward, next_state, done = zip(*transitions)
         return np.array(state), action, reward, np.array(next_state), done
 
     def size(self):  # 目前buffer中数据的数量
         return len(self.buffer)
 
+
 class Qnet(torch.nn.Module):
     ''' 只有一层隐藏层的Q网络 '''
+
     def __init__(self, state_dim, hidden_dim, action_dim):
         super(Qnet, self).__init__()
         self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
         self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
+        print(x.size())
         x = F.relu(self.fc1(x))  # 隐藏层使用ReLU激活函数
         return self.fc2(x)
 
+
 class DQN:
     ''' DQN算法 '''
+
     def __init__(self, state_dim, hidden_dim, action_dim, learning_rate, gamma,
                  epsilon, target_update, device):
         self.action_dim = action_dim
@@ -95,15 +103,17 @@ class DQN:
             self.target_q_net.load_state_dict(
                 self.q_net.state_dict())  # 更新目标网络
         self.count += 1
+        return dqn_loss.item()
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     lr = 2e-3
     num_episodes = 500
     hidden_dim = 128
     gamma = 0.98
     epsilon = 0.01
     target_update = 10
-    buffer_size = 10000
+    buffer_size = 10000000000000
     minimal_size = 500
     batch_size = 64
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device(
@@ -115,13 +125,14 @@ if __name__=='__main__':
     np.random.seed(0)
     env.seed(0)
     torch.manual_seed(0)
-    replay_buffer = ReplayBuffer(buffer_size)
+    replay_buffer = DQNReplayBuffer(buffer_size)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
     agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
-            target_update, device)
+                target_update, device)
 
     DQN_return_list = []
+    DQN_loss = []
     for i in range(10):
         with tqdm(total=int(num_episodes / 10), desc='Iteration %d' % i) as pbar:
             for i_episode in range(int(num_episodes / 10)):
@@ -131,10 +142,11 @@ if __name__=='__main__':
                 while not done:
                     action = agent.take_action(state)
                     next_state, reward, done, _ = env.step(action)
+                    print(state)
                     replay_buffer.add(state, action, reward, next_state, done)
                     state = next_state
                     episode_return += reward
-                # 当buffer数据的数量超过一定值后,才进行Q网络训练
+                    # 当buffer数据的数量超过一定值后,才进行Q网络训练
                     if replay_buffer.size() > minimal_size:
                         b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
                         transition_dict = {
@@ -144,21 +156,23 @@ if __name__=='__main__':
                             'rewards': b_r,
                             'dones': b_d
                         }
-                        agent.update(transition_dict)
+                        dqn_loss = agent.update(transition_dict)
+                        DQN_loss.append(dqn_loss)
                 DQN_return_list.append(episode_return)
                 if (i_episode + 1) % 10 == 0:
                     pbar.set_postfix({
                         'episode':
-                        '%d' % (num_episodes / 10 * i + i_episode + 1),
+                            '%d' % (num_episodes / 10 * i + i_episode + 1),
                         'return':
-                        '%.3f' % np.mean(DQN_return_list[-10:])
+                            '%.3f' % np.mean(DQN_return_list[-10:])
                     })
                 pbar.update(1)
 
     episodes_list = list(range(len(DQN_return_list)))
     DQN_mv_return = rl_utils.moving_average(DQN_return_list, 9)
-    plt.plot(episodes_list, DQN_mv_return)
-    plt.xlabel('Episodes')
-    plt.ylabel('Returns')
-    plt.title('DQN on {}'.format(env_name))
+    # plt.plot(episodes_list, DQN_mv_return)
+    # plt.xlabel('Episodes')
+    # plt.ylabel('Returns')
+    # plt.title('DQN on {}'.format(env_name))
+    plt.plot(DQN_loss)
     plt.show()

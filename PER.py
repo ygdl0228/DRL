@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from segment_tree import MinSegmentTree, SumSegmentTree
+from tqdm import tqdm
 
 
 class ReplayBuffer:
@@ -51,17 +52,6 @@ class ReplayBuffer:
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
-    """Prioritized Replay buffer.
-
-    Attributes:
-        max_priority (float): max priority
-        tree_ptr (int): next index of tree
-        alpha (float): alpha parameter for prioritized replay buffer
-        sum_tree (SumSegmentTree): sum tree for prior
-        min_tree (MinSegmentTree): min tree for min prior to get max weight
-
-    """
-
     def __init__(self, obs_dim, size, batch_size, alpha):
         assert alpha >= 0
         super(PrioritizedReplayBuffer, self).__init__(obs_dim, size, batch_size)
@@ -228,6 +218,7 @@ class DQNAgent:
 
     def step(self, action):
         next_state, reward, done, _ = self.env.step(action)
+        reward += 100
         if not self.is_test:
             self.transition += [reward, next_state, done]
             self.memory.store(*self.transition)
@@ -268,8 +259,7 @@ class DQNAgent:
         losses = []
         scores = []
         score = 0
-
-        for frame_idx in range(1, num_frames + 1):
+        for frame_idx in tqdm(range(1, num_frames + 1), desc='Processing'):
             action = self.select_action(state)
             next_state, reward, done = self.step(action)
 
@@ -304,6 +294,7 @@ class DQNAgent:
                 if update_cnt % self.target_update == 0:
                     self._target_hard_update()
         self.env.close()
+        self._plot(num_frames, scores, losses, epsilons)
 
     def test(self, video_folder: str) -> None:
         """Test the agent."""
@@ -357,22 +348,17 @@ class DQNAgent:
         """Hard update: target <- local."""
         self.dqn_target.load_state_dict(self.dqn.state_dict())
 
-    def _plot(
-            self,
-            frame_idx: int,
-            scores: List[float],
-            losses: List[float],
-            epsilons: List[float],
-    ):
+    def _plot(self, frame_idx, scores, losses, epsilons,
+              ):
         """Plot the training progresses."""
-        plt.figure(figsize=(20, 5))
-        plt.subplot(131)
+        plt.figure(figsize=(10, 5))
+        plt.subplot(221)
         plt.title('frame %s. score: %s' % (frame_idx, np.mean(scores[-10:])))
         plt.plot(scores)
-        plt.subplot(132)
+        plt.subplot(222)
         plt.title('loss')
         plt.plot(losses)
-        plt.subplot(133)
+        plt.subplot(223)
         plt.title('epsilons')
         plt.plot(epsilons)
         plt.show()
@@ -380,7 +366,7 @@ class DQNAgent:
 
 env_id = "CartPole-v0"
 env = gym.make(env_id)
-num_frames = 20000
+num_frames = 2000
 memory_size = 2000
 batch_size = 32
 target_update = 100
